@@ -161,9 +161,11 @@
             break;
           case "ArrowUp":
             onKeyDown("U");
+            e.preventDefault(); // スクロールを抑制
             break;
           case "ArrowDown":
             onKeyDown("D");
+            e.preventDefault(); // スクロールを抑制
             break;
           case "z":
             onKeyDown("Z");
