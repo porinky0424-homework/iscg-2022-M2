@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://unpkg.com/three@0.137.4/build/three.min.js"></script>
+    <script src="https://unpkg.com/@seregpie/three.text-texture"></script>
+    <script src="https://unpkg.com/@seregpie/three.text-sprite"></script>
+    <script src="init.js"></script>
+    <script src="makePolygon.js"></script>
+    <script src="formatData.js"></script>
+    <script src="dooSabin.js"></script>
+    <script src="readOffFile.js"></script>
+    <script>
+      // renderer, scene, cameraをグローバルにアクセスできるようにする
+      let renderer, scene, camera;
+
+      // ページの読み込みを待機
+      window.addEventListener("DOMContentLoaded", main);
+
+      // カメラの座標処理に利用される変数
+      const cameraCoordinate = {
+        radius: 6,
+        theta: (3 * Math.PI) / 8,
+        phi: Math.PI / 6,
+      };
+
+      // 頂点、面の情報(初期値として簡易的に立方体を入れている)
+      let points = new Map([
+        [0, [1, -1, 1]],
+        [1, [1, 1, 1]],
+        [2, [-1, 1, 1]],
+        [3, [-1, -1, 1]],
+        [4, [1, -1, -1]],
+        [5, [1, 1, -1]],
+        [6, [-1, 1, -1]],
+        [7, [-1, -1, -1]],
+      ]);
+      let faces = new Map([
+        [0, { pointsCount: 4, pointIds: [0, 1, 2, 3] }],
+        [1, { pointsCount: 4, pointIds: [0, 1, 5, 4] }],
+        [2, { pointsCount: 4, pointIds: [1, 5, 6, 2] }],
+        [3, { pointsCount: 4, pointIds: [2, 3, 7, 6] }],
+        [4, { pointsCount: 4, pointIds: [0, 4, 7, 3] }],
+        [5, { pointsCount: 4, pointIds: [4, 5, 6, 7] }],
+      ]);
+
+      // 面のmeshを保存しておく配列
+      let polygonMeshes = [];
+
+      // 更新を反映する
+      function show() {
+        // もともとのやつを削除
+        polygonMeshes.forEach((mesh) => {
+          if (mesh !== undefined) {
+            scene.remove(mesh);
+            mesh.material.dispose();
+            mesh.geometry.dispose();
+          }
+        });
+        polygonMeshes = [];
+
+        // 今のやつを反映
+        faces.forEach((face, faceId) => {
+          polygonMeshes.push(
+            makePolygon(
+              scene,
+              face.pointIds.map((pointId) => points.get(pointId))
+            )
+          );
+        });
+
+        renderer.render(scene, camera);
+      }
+
+      function main() {
+        // 初期設定
+        ({ renderer, scene, camera } = init(cameraCoordinate));
+
+        // ファイル入力用の設定
+        const input = document.getElementById("file");
+        const reader = new FileReader();
+        input.addEventListener("change", () => {
+          for (file of input.files) {
+            reader.readAsText(file, "UTF-8");
+            reader.onload = () => {
+              ({ points, faces } = readOffFile(reader.result));
+              show();
+            };
+          }
+        });
+
+        // 描画
+        show();
+      }
+
+      function subdivide() {
+        const { edges, faceEdges } = formatData(points, faces);
+        ({ points, faces } = dooSabin(points, faces, edges, faceEdges));
+        show();
+      }
+
+      // カメラの移動の実行
+      function onKeyDown(key) {
+        switch (key) {
+          case "Z":
+            cameraCoordinate.radius -= 0.1;
+            break;
+          case "X":
+            cameraCoordinate.radius += 0.1;
+            break;
+          default:
+            const diff =
+              key === "R" || key === "U" ? Math.PI / 96 : -Math.PI / 96;
+            switch (key) {
+              case "L":
+              case "R":
+                cameraCoordinate.phi += diff;
+                camera.rotateOnWorldAxis(new THREE.Vector3(0, 0, 1), diff);
+                break;
+              case "U":
+              case "D":
+                cameraCoordinate.theta += diff;
+                camera.rotateOnWorldAxis(
+                  new THREE.Vector3(
+                    -Math.sin(cameraCoordinate.phi),
+                    Math.cos(cameraCoordinate.phi),
+                    0
+                  ),
+                  diff
+                );
+                break;
+              default:
+                throw new Error("Invalid key.");
+                break;
+            }
+            break;
+        }
+
+        // cameraCoordinateから座標を計算してカメラの位置を調整する
+        camera.position.set(
+          cameraCoordinate.radius *
+            Math.sin(cameraCoordinate.theta) *
+            Math.cos(cameraCoordinate.phi),
+          cameraCoordinate.radius *
+            Math.sin(cameraCoordinate.theta) *
+            Math.sin(cameraCoordinate.phi),
+          cameraCoordinate.radius * Math.cos(cameraCoordinate.theta)
+        );
+
+        // 再レンダリング
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener("keydown", (e) => {
+        switch (e.key) {
+          case "ArrowLeft":
+            onKeyDown("L");
+            break;
+          case "ArrowRight":
+            onKeyDown("R");
+            break;
+          case "ArrowUp":
+            onKeyDown("U");
+            break;
+          case "ArrowDown":
+            onKeyDown("D");
+            break;
+          case "z":
+            onKeyDown("Z");
+            break;
+          case "z":
+            onKeyDown("Z");
+            break;
+          case "x":
+            onKeyDown("X");
+            break;
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <canvas id="Canvas" style="border: 1px solid black"></canvas>
+    <div>
+      <p>
+        You can change viewing angle by arrow-keys. You can zoom in/out by
+        z-key, x-key.
+      </p>
+    </div>
+    <div>
+      <button onclick="subdivide()">Subdivide (Doo-Sabin Method)</button>
+    </div>
+    <div>
+      <input id="file" type="file" name="file" />
+    </div>
+  </body>
+</html>
